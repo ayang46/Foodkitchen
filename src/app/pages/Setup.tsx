@@ -141,7 +141,7 @@ export const Setup: React.FC = () => {
 
         <div className="text-center">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/menu')}
             className="text-orange-600 hover:underline font-medium text-lg"
           >
             Back to home

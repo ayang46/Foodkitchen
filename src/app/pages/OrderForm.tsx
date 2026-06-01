@@ -106,7 +106,7 @@ export const OrderForm: React.FC = () => {
             )}
           </p>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/menu')}
             className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-8 rounded-xl text-lg transition-colors"
           >
             {t('Back to Menu', '返回菜单')}

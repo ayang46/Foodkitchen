@@ -111,7 +111,7 @@ export const AdminLogin: React.FC = () => {
 
         <div className="mt-6 text-center">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/menu')}
             className="text-orange-600 hover:underline font-medium"
           >
             {t('Back to menu', '返回菜单')}

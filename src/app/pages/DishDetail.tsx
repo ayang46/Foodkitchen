@@ -62,7 +62,7 @@ export const DishDetail: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-800 mb-4">
             {t('Dish not found', '未找到菜品')}
           </h2>
-          <Link to="/" className="text-orange-600 hover:underline">
+          <Link to="/menu" className="text-orange-600 hover:underline">
             {t('Back to menu', '返回菜单')}
           </Link>
         </div>
@@ -74,7 +74,7 @@ export const DishDetail: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/menu')}
           className="flex items-center space-x-2 text-gray-700 hover:text-orange-600 mb-6 text-base sm:text-lg"
         >
           <ArrowLeft className="w-5 h-5" />

@@ -48,7 +48,7 @@ export const AdminDashboard: React.FC = () => {
                 <span className="hidden sm:inline">{language === 'en' ? '中文' : 'EN'}</span>
               </button>
               <Link
-                to="/"
+                to="/menu"
                 className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 <Home className="w-5 h-5" />

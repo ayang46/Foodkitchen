@@ -10,7 +10,7 @@ export const Header: React.FC = () => {
     <header className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
-          <Link to="/" className="flex items-center space-x-2">
+          <Link to="/menu" className="flex items-center space-x-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-orange-600">
               {t("Grandma's Kitchen", "奶奶的厨房")}
             </h1>
@@ -18,7 +18,7 @@ export const Header: React.FC = () => {
 
           <nav className="flex items-center space-x-4 sm:space-x-6">
             <Link
-              to="/"
+              to="/menu"
               className="text-base sm:text-lg font-medium text-gray-700 hover:text-orange-600"
             >
               {t('Menu', '菜单')}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { Header } from './components/Header';
@@ -17,7 +17,7 @@ import { ViewOrders } from './pages/admin/ViewOrders';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <LanguageProvider>
         <AuthProvider>
           <Routes>
@@ -27,7 +27,8 @@ export default function App() {
                 <>
                   <Header />
                   <Routes>
-                    <Route path="/" element={<Home />} />
+                    <Route path="/" element={<Navigate to="/menu" replace />} />
+                    <Route path="/menu" element={<Home />} />
                     <Route path="/dish/:id" element={<DishDetail />} />
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/order" element={<OrderForm />} />
