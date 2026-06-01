@@ -26,7 +26,7 @@ export const AdminLogin: React.FC = () => {
 
     try {
       await signIn(email, password);
-      navigate('/admin');
+      navigate('/admin/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
       const errorMessage = err.message || t('Invalid email or password', '邮箱或密码无效');

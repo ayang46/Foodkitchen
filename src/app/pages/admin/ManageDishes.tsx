@@ -561,7 +561,7 @@ export const ManageDishes: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between mb-8">
             <button
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/admin/dashboard')}
               className="flex items-center space-x-2 text-gray-700 hover:text-orange-600 text-lg"
             >
               <ArrowLeft className="w-6 h-6" />

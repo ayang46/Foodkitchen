@@ -100,7 +100,7 @@ export const Setup: React.FC = () => {
             </div>
             <p className="text-lg text-green-700 mb-4">{message}</p>
             <button
-              onClick={() => navigate('/admin/login')}
+              onClick={() => navigate('/admin')}
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl text-lg transition-colors"
             >
               Go to Admin Login
@@ -133,7 +133,7 @@ export const Setup: React.FC = () => {
                     <li>Password: test-12345</li>
                   </ul>
                 </li>
-                <li>Then you can log in at /admin/login</li>
+                <li>Then you can log in at /admin</li>
               </ol>
             </div>
           </div>

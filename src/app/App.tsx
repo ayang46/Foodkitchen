@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { AuthProvider } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Header } from './components/Header';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Home } from './pages/Home';
@@ -14,6 +15,24 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageDishes } from './pages/admin/ManageDishes';
 import { ManageCategories } from './pages/admin/ManageCategories';
 import { ViewOrders } from './pages/admin/ViewOrders';
+
+const AdminEntry: React.FC = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  return <AdminLogin />;
+};
 
 export default function App() {
   return (
@@ -38,17 +57,37 @@ export default function App() {
             />
 
             <Route path="/setup" element={<Setup />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminEntry />} />
+            <Route path="/admin/login" element={<Navigate to="/admin" replace />} />
             <Route
-              path="/admin/*"
+              path="/admin/dashboard"
               element={
                 <ProtectedRoute>
-                  <Routes>
-                    <Route path="/" element={<AdminDashboard />} />
-                    <Route path="/dishes" element={<ManageDishes />} />
-                    <Route path="/categories" element={<ManageCategories />} />
-                    <Route path="/orders" element={<ViewOrders />} />
-                  </Routes>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/dishes"
+              element={
+                <ProtectedRoute>
+                  <ManageDishes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/categories"
+              element={
+                <ProtectedRoute>
+                  <ManageCategories />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/orders"
+              element={
+                <ProtectedRoute>
+                  <ViewOrders />
                 </ProtectedRoute>
               }
             />
