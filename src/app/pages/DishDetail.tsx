@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { ArrowLeft, ShoppingCart } from 'lucide-react';
+import { CART_STORAGE_KEY, addCartItem, normalizeCartItems, persistCartItems } from '../utils/cart';
 
 interface Dish {
   id: string;
@@ -45,6 +46,17 @@ export const DishDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddToCart = () => {
+    if (!dish) return;
+
+    const storedCart = window.localStorage.getItem(CART_STORAGE_KEY);
+    const currentCart = storedCart ? normalizeCartItems(JSON.parse(storedCart)) : [];
+    const nextCart = addCartItem(currentCart, dish.id, 1);
+
+    persistCartItems(nextCart);
+    navigate('/order');
   };
 
   if (loading) {
@@ -132,16 +144,16 @@ export const DishDetail: React.FC = () => {
                 </div>
               </div>
 
-              <Link
-                to="/order"
-                state={{ dishId: dish.id }}
+              <button
+                type="button"
+                onClick={handleAddToCart}
                 className="block w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 sm:py-5 px-6 rounded-xl text-center text-lg sm:text-xl transition-colors"
               >
                 <div className="flex items-center justify-center space-x-2">
                   <ShoppingCart className="w-6 h-6" />
-                  <span>{t('Order This Dish', '订购此菜品')}</span>
+                  <span>{t('Add to Cart', '加入购物车')}</span>
                 </div>
-              </Link>
+              </button>
             </div>
           </div>
         </div>

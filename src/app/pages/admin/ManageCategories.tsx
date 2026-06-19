@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
@@ -16,6 +16,7 @@ export const ManageCategories: React.FC = () => {
   const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const formRef = useRef<HTMLDivElement>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -129,6 +130,9 @@ export const ManageCategories: React.FC = () => {
       nameZh: category.nameZh,
     });
     setShowForm(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   const resetForm = () => {
@@ -177,7 +181,7 @@ export const ManageCategories: React.FC = () => {
         </h1>
 
         {showForm && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
+          <div ref={formRef} className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">
                 {editingCategory ? t('Edit Category', '编辑分类') : t('Add New Category', '添加新分类')}

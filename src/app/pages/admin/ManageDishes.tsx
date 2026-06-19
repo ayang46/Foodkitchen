@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
@@ -196,6 +196,8 @@ export const ManageDishes: React.FC = () => {
   const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const dishFormRef = useRef<HTMLDivElement>(null);
+  const categoryFormRef = useRef<HTMLDivElement>(null);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showDishForm, setShowDishForm] = useState(false);
@@ -518,6 +520,9 @@ export const ManageDishes: React.FC = () => {
       photoUrl: dish.photoUrl,
     });
     setShowDishForm(true);
+    setTimeout(() => {
+      dishFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   const handleEditCategory = (category: Category) => {
@@ -527,6 +532,9 @@ export const ManageDishes: React.FC = () => {
       nameZh: category.nameZh,
     });
     setShowCategoryForm(true);
+    setTimeout(() => {
+      categoryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   const resetDishForm = () => {
@@ -602,7 +610,7 @@ export const ManageDishes: React.FC = () => {
           </h1>
 
         {showCategoryForm && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
+          <div ref={categoryFormRef} className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">
                 {editingCategory ? t('Edit Category', '编辑分类') : t('Add New Category', '添加新分类')}
@@ -675,7 +683,7 @@ export const ManageDishes: React.FC = () => {
         )}
 
         {showDishForm && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
+          <div ref={dishFormRef} className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">
                 {editingDish ? t('Edit Dish', '编辑菜品') : t('Add New Dish', '添加新菜品')}

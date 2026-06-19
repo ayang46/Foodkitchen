@@ -51,6 +51,127 @@ const getAuthUser = async (request: Request) => {
   return user;
 };
 
+interface OrderItem {
+  dishId: string;
+  quantity: number;
+}
+
+const normalizeOrderItems = (items: unknown, dishIds: unknown): OrderItem[] => {
+  if (Array.isArray(items) && items.length > 0) {
+    const normalized = items
+      .map((item) => ({
+        dishId: typeof item?.dishId === 'string' ? item.dishId : '',
+        quantity: Number(item?.quantity),
+      }))
+      .filter((item) => item.dishId && Number.isFinite(item.quantity) && item.quantity > 0);
+
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  if (!Array.isArray(dishIds)) {
+    return [];
+  }
+
+  const grouped = new Map<string, number>();
+  dishIds.forEach((dishId) => {
+    if (typeof dishId !== 'string' || !dishId) return;
+    grouped.set(dishId, (grouped.get(dishId) || 0) + 1);
+  });
+
+  return Array.from(grouped.entries()).map(([dishId, quantity]) => ({ dishId, quantity }));
+};
+
+const getDishCatalog = async () => {
+  const dishes = await kv.getByPrefix('dish:');
+  return new Map(dishes.map((dish: any) => [dish.id, dish]));
+};
+
+const buildOrderSummary = (order: any, items: OrderItem[], dishCatalog: Map<string, any>) => {
+  const itemLines = items.map((item) => {
+    const dish = dishCatalog.get(item.dishId);
+    const name = dish ? dish.nameEn || dish.nameZh || item.dishId : item.dishId;
+    const price = Number(dish?.price || 0);
+    const lineTotal = price * item.quantity;
+    return `- ${name} x${item.quantity}${lineTotal ? ` ($${lineTotal.toFixed(2)})` : ''}`;
+  });
+
+  const totalItems = items.reduce((total, item) => total + item.quantity, 0);
+
+  return [
+    `Name: ${order.customerName}`,
+    `Email: ${order.customerEmail}`,
+    `Phone: ${order.customerPhone}`,
+    `Items (${totalItems}):`,
+    ...itemLines,
+    order.message ? `Notes: ${order.message}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
+
+const sendEmailNotification = async (customerEmail: string, subject: string, text: string) => {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const fromEmail = Deno.env.get('ORDER_NOTIFICATION_FROM_EMAIL');
+
+  if (!apiKey || !fromEmail) {
+    return { status: 'skipped', reason: 'Email provider not configured' };
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: customerEmail,
+      subject,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Email provider error: ${await response.text()}`);
+  }
+
+  return { status: 'sent' };
+};
+
+const sendSmsNotification = async (customerPhone: string, text: string) => {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER');
+
+  if (!accountSid || !authToken || !fromNumber) {
+    return { status: 'skipped', reason: 'SMS provider not configured' };
+  }
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        From: fromNumber,
+        To: customerPhone,
+        Body: text,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`SMS provider error: ${await response.text()}`);
+  }
+
+  return { status: 'sent' };
+};
+
 // Initialize storage bucket for dish photos
 const initStorage = async () => {
   const supabase = createClient(
@@ -438,7 +559,19 @@ app.post("/make-server-b11e7096/upload-photo", async (c) => {
 // ORDER INQUIRY ROUTES
 app.post("/make-server-b11e7096/orders", async (c) => {
   try {
-    const { customerName, customerEmail, customerPhone, dishIds, message, language } = await c.req.json();
+    const { customerName, customerEmail, customerPhone, items, dishIds, message, language } = await c.req.json();
+    const normalizedItems = normalizeOrderItems(items, dishIds);
+
+    if (normalizedItems.length === 0) {
+      return c.json({ error: 'At least one dish is required' }, 400);
+    }
+
+    const dishCatalog = await getDishCatalog();
+    const summary = buildOrderSummary(
+      { customerName, customerEmail, customerPhone, message },
+      normalizedItems,
+      dishCatalog,
+    );
 
     const id = crypto.randomUUID();
     const order = {
@@ -446,7 +579,8 @@ app.post("/make-server-b11e7096/orders", async (c) => {
       customerName,
       customerEmail,
       customerPhone,
-      dishIds,
+      items: normalizedItems,
+      dishIds: normalizedItems.flatMap((item) => Array.from({ length: item.quantity }, () => item.dishId)),
       message,
       language,
       status: 'pending',
@@ -454,7 +588,28 @@ app.post("/make-server-b11e7096/orders", async (c) => {
     };
 
     await kv.set(`order:${id}`, order);
-    return c.json({ order });
+
+    const notificationText = `Foodkitchen order inquiry received.\n\n${summary}\n\nWe will review your request and contact you soon.`;
+    const notificationSubject = 'Foodkitchen order inquiry received';
+    const notifications = await Promise.allSettled([
+      sendEmailNotification(customerEmail, notificationSubject, notificationText),
+      sendSmsNotification(customerPhone, notificationText),
+    ]);
+
+    notifications.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.log(index === 0 ? 'Email notification failed:' : 'SMS notification failed:', result.reason);
+      }
+    });
+
+    return c.json({
+      order,
+      notifications: notifications.map((result) =>
+        result.status === 'fulfilled'
+          ? result.value
+          : { status: 'failed', reason: String(result.reason) }
+      ),
+    });
   } catch (error) {
     console.log('Failed to create order inquiry:', error);
     return c.json({ error: 'Failed to create order inquiry' }, 500);
@@ -521,266 +676,6 @@ app.delete("/make-server-b11e7096/orders/:id", async (c) => {
   } catch (error) {
     console.log('Failed to delete order:', error);
     return c.json({ error: 'Failed to delete order' }, 500);
-  }
-});
-
-// SEED DATA ENDPOINT
-app.post("/make-server-b11e7096/seed", async (c) => {
-  try {
-    const user = await getAuthUser(c.req.raw);
-    if (!user) {
-      return c.json({ error: 'Unauthorized - admin access required' }, 401);
-    }
-
-    // Clear existing data
-    const existingCategories = await kv.getByPrefix('category:');
-    const existingDishes = await kv.getByPrefix('dish:');
-    const existingOrders = await kv.getByPrefix('order:');
-
-    for (const cat of existingCategories) {
-      await kv.del(`category:${cat.id}`);
-    }
-    for (const dish of existingDishes) {
-      await kv.del(`dish:${dish.id}`);
-    }
-    for (const order of existingOrders) {
-      await kv.del(`order:${order.id}`);
-    }
-
-    // Create test categories
-    const categories = [
-      { nameEn: 'Appetizers', nameZh: '开胃菜' },
-      { nameEn: 'Main Courses', nameZh: '主菜' },
-      { nameEn: 'Soups', nameZh: '汤' },
-      { nameEn: 'Vegetables', nameZh: '蔬菜' },
-      { nameEn: 'Rice & Noodles', nameZh: '米饭和面条' },
-    ];
-
-    const categoryMap: Record<string, string> = {};
-    for (const cat of categories) {
-      const id = crypto.randomUUID();
-      categoryMap[cat.nameEn] = id;
-      const category = {
-        id,
-        nameEn: cat.nameEn,
-        nameZh: cat.nameZh,
-        createdAt: new Date().toISOString(),
-      };
-      await kv.set(`category:${id}`, category);
-    }
-
-    // Create test dishes
-    const dishes = [
-      {
-        nameEn: 'Spring Rolls',
-        nameZh: '春卷',
-        descriptionEn: 'Crispy fried spring rolls filled with vegetables and shrimp',
-        descriptionZh: '脆皮炸春卷，内馅是蔬菜和虾',
-        ingredientsEn: 'Spring roll wrappers, shrimp, cabbage, carrots, mushrooms, soy sauce',
-        ingredientsZh: '春卷皮、虾、卷心菜、胡萝卜、蘑菇、酱油',
-        price: 6.99,
-        categoryId: categoryMap['Appetizers'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1606080945470-343f7a360a1d?w=500',
-      },
-      {
-        nameEn: 'Mapo Tofu',
-        nameZh: '麻婆豆腐',
-        descriptionEn: 'Spicy and numbing tofu dish with minced pork and Sichuan peppercorn sauce',
-        descriptionZh: '辛辣而麻木的豆腐菜，配肉末和四川花椒酱',
-        ingredientsEn: 'Soft tofu, ground pork, Sichuan peppercorn, chili oil, garlic, ginger, soy sauce',
-        ingredientsZh: '嫩豆腐、肉末、四川花椒、辣油、大蒜、生姜、酱油',
-        price: 10.99,
-        categoryId: categoryMap['Main Courses'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500',
-      },
-      {
-        nameEn: 'Kung Pao Chicken',
-        nameZh: '宫保鸡丁',
-        descriptionEn: 'Tender chicken cubes stir-fried with peanuts and dried chilies in a sweet and savory sauce',
-        descriptionZh: '嫩鸡丁与花生和干辣椒炒，配甜咸酱',
-        ingredientsEn: 'Chicken breast, peanuts, dried red chilies, bell peppers, soy sauce, vinegar, sugar, garlic',
-        ingredientsZh: '鸡胸肉、花生、干红辣椒、青椒、酱油、醋、糖、大蒜',
-        price: 12.99,
-        categoryId: categoryMap['Main Courses'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1626730488232-7dca56fdfc5e?w=500',
-      },
-      {
-        nameEn: 'Hot and Sour Soup',
-        nameZh: '酸辣汤',
-        descriptionEn: 'Tangy and spicy soup with tofu, mushrooms, and bamboo shoots',
-        descriptionZh: '酸辣汤，配豆腐、蘑菇和竹笋',
-        ingredientsEn: 'Tofu, mushrooms, bamboo shoots, wood ear fungus, chicken broth, rice vinegar, white pepper, chili oil',
-        ingredientsZh: '豆腐、蘑菇、竹笋、木耳、鸡汤、米醋、白胡椒、辣油',
-        price: 5.99,
-        categoryId: categoryMap['Soups'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=500',
-      },
-      {
-        nameEn: 'Egg Drop Soup',
-        nameZh: '蛋花汤',
-        descriptionEn: 'Silky smooth chicken broth with egg ribbons and green onions',
-        descriptionZh: '鸡汤配蛋花和绿葱',
-        ingredientsEn: 'Chicken broth, eggs, cornstarch, green onions, salt, white pepper',
-        ingredientsZh: '鸡汤、鸡蛋、淀粉、绿葱、盐、白胡椒',
-        price: 4.99,
-        categoryId: categoryMap['Soups'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1568084308-db1a60dcc9e6?w=500',
-      },
-      {
-        nameEn: 'Stir-fried Vegetables with Garlic',
-        nameZh: '蒜炒蔬菜',
-        descriptionEn: 'Fresh mixed vegetables stir-fried with lots of garlic in a light soy sauce',
-        descriptionZh: '新鲜混合蔬菜与大蒜炒，配清淡酱油',
-        ingredientsEn: 'Broccoli, snap peas, carrots, bell peppers, garlic, soy sauce, sesame oil, ginger',
-        ingredientsZh: '西兰花、豌豆荚、胡萝卜、青椒、大蒜、酱油、麻油、生姜',
-        price: 7.99,
-        categoryId: categoryMap['Vegetables'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1609501676725-7186f017a4b5?w=500',
-      },
-      {
-        nameEn: 'Eggplant in Garlic Sauce',
-        nameZh: '蒜泥茄子',
-        descriptionEn: 'Tender eggplant pieces coated in a rich garlic and spicy sauce',
-        descriptionZh: '嫩茄子块配蒜和辣酱',
-        ingredientsEn: 'Eggplant, garlic, chili oil, soy sauce, vinegar, sesame oil, scallions',
-        ingredientsZh: '茄子、大蒜、辣油、酱油、醋、麻油、葱',
-        price: 8.99,
-        categoryId: categoryMap['Vegetables'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1577000522272-dc53aaf41901?w=500',
-      },
-      {
-        nameEn: 'Fried Rice with Shrimp',
-        nameZh: '虾炒饭',
-        descriptionEn: 'Fluffy jasmine rice stir-fried with shrimp, peas, carrots, and scrambled eggs',
-        descriptionZh: '蓬松的茉莉花米饭与虾、豌豆、胡萝卜和炒鸡蛋炒',
-        ingredientsEn: 'Jasmine rice, shrimp, peas, carrots, eggs, soy sauce, sesame oil, garlic, green onions',
-        ingredientsZh: '茉莉花米、虾、豌豆、胡萝卜、鸡蛋、酱油、麻油、大蒜、葱',
-        price: 11.99,
-        categoryId: categoryMap['Rice & Noodles'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1585238341710-4b2f3c583de1?w=500',
-      },
-      {
-        nameEn: 'Chow Mein',
-        nameZh: '炒面',
-        descriptionEn: 'Crispy noodles stir-fried with chicken, vegetables, and savory sauce',
-        descriptionZh: '脆面与鸡肉、蔬菜和咸味酱炒',
-        ingredientsEn: 'Chow mein noodles, chicken, cabbage, carrots, bell peppers, soy sauce, garlic, sesame oil',
-        ingredientsZh: '炒面、鸡肉、卷心菜、胡萝卜、青椒、酱油、大蒜、麻油',
-        price: 10.99,
-        categoryId: categoryMap['Rice & Noodles'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561541?w=500',
-      },
-      {
-        nameEn: 'Orange Chicken',
-        nameZh: '橙子鸡',
-        descriptionEn: 'Crispy chicken in a tangy orange and ginger sauce with a hint of chili',
-        descriptionZh: '脆鸡配橙子和生姜酱，带一点辣椒',
-        ingredientsEn: 'Chicken, orange juice, ginger, garlic, chili peppers, soy sauce, honey, sesame seeds',
-        ingredientsZh: '鸡肉、橙汁、生姜、大蒜、辣椒、酱油、蜂蜜、芝麻',
-        price: 13.99,
-        categoryId: categoryMap['Main Courses'],
-        available: true,
-        photoUrl: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=500',
-      },
-    ];
-
-    const dishMap: Record<string, string> = {};
-    for (const dish of dishes) {
-      const id = crypto.randomUUID();
-      dishMap[dish.nameEn] = id;
-      const dishData = {
-        id,
-        ...dish,
-        createdAt: new Date().toISOString(),
-      };
-      await kv.set(`dish:${id}`, dishData);
-    }
-
-    // Create test orders
-    const orders = [
-      {
-        customerName: 'John Smith',
-        customerEmail: 'john@example.com',
-        customerPhone: '555-0101',
-        dishIds: [dishMap['Spring Rolls'], dishMap['Kung Pao Chicken']],
-        message: 'Please make the Kung Pao Chicken extra spicy',
-        language: 'en',
-        status: 'pending',
-        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        customerName: '李美丽',
-        customerEmail: 'li@example.com',
-        customerPhone: '555-0102',
-        dishIds: [dishMap['Mapo Tofu'], dishMap['Fried Rice with Shrimp'], dishMap['Hot and Sour Soup']],
-        message: '麻婆豆腐要辣的',
-        language: 'zh',
-        status: 'confirmed',
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        customerName: 'Maria Garcia',
-        customerEmail: 'maria@example.com',
-        customerPhone: '555-0103',
-        dishIds: [dishMap['Eggplant in Garlic Sauce'], dishMap['Stir-fried Vegetables with Garlic']],
-        message: 'Vegetarian options - no meat please',
-        language: 'en',
-        status: 'pending',
-        createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        customerName: 'Chen Wei',
-        customerEmail: 'chen@example.com',
-        customerPhone: '555-0104',
-        dishIds: [dishMap['Orange Chicken'], dishMap['Chow Mein']],
-        message: 'Add extra sauce on the side',
-        language: 'en',
-        status: 'completed',
-        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        customerName: 'Sophie Lee',
-        customerEmail: 'sophie@example.com',
-        customerPhone: '555-0105',
-        dishIds: [dishMap['Egg Drop Soup'], dishMap['Fried Rice with Shrimp']],
-        message: '',
-        language: 'en',
-        status: 'confirmed',
-        createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-      },
-    ];
-
-    for (const order of orders) {
-      const id = crypto.randomUUID();
-      const orderData = {
-        id,
-        ...order,
-        createdAt: order.createdAt,
-      };
-      await kv.set(`order:${id}`, orderData);
-    }
-
-    return c.json({
-      success: true,
-      message: 'Database seeded with test data',
-      stats: {
-        categories: categories.length,
-        dishes: dishes.length,
-        orders: orders.length,
-      },
-    });
-  } catch (error) {
-    console.log('Seed error:', error);
-    return c.json({ error: 'Failed to seed database', details: String(error) }, 500);
   }
 });
 

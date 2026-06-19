@@ -12,11 +12,17 @@ interface Order {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  items?: OrderItem[];
   dishIds: string[];
   message: string;
   language: string;
   createdAt: string;
   adminNotes?: string;
+}
+
+interface OrderItem {
+  dishId: string;
+  quantity: number;
 }
 
 interface DraggableOrderCardProps {
@@ -82,6 +88,19 @@ const DraggableOrderCard: React.FC<DraggableOrderCardProps> = ({
 
   drag(drop(ref));
 
+  const groupedItems = React.useMemo(() => {
+    if (order.items && order.items.length > 0) {
+      return order.items;
+    }
+
+    const grouped = new Map<string, number>();
+    (order.dishIds || []).forEach((dishId) => {
+      grouped.set(dishId, (grouped.get(dishId) || 0) + 1);
+    });
+
+    return Array.from(grouped.entries()).map(([dishId, quantity]) => ({ dishId, quantity }));
+  }, [order.items, order.dishIds]);
+
   return (
     <div
       ref={ref}
@@ -139,14 +158,16 @@ const DraggableOrderCard: React.FC<DraggableOrderCardProps> = ({
       <div className="bg-orange-50 rounded-xl p-4 sm:p-6 mb-6">
         <h3 className="text-xl font-bold text-gray-800 mb-3 flex items-center space-x-2">
           <UtensilsCrossed className="w-6 h-6 text-orange-600" />
-          <span>{t('Selected Dishes', '选择的菜品')}</span>
+          <span>{t('Order Items', '订单项目')}</span>
         </h3>
-        {order.dishIds && order.dishIds.length > 0 ? (
+        {groupedItems.length > 0 ? (
           <ul className="space-y-2">
-            {order.dishIds.map((dishId, idx) => (
-              <li key={idx} className="flex items-start space-x-2 text-lg">
+            {groupedItems.map((item, idx) => (
+              <li key={`${item.dishId}-${idx}`} className="flex items-start space-x-2 text-lg">
                 <span className="text-orange-600 font-bold">{idx + 1}.</span>
-                <span className="text-gray-800 font-medium">{getDishName(dishId)}</span>
+                <span className="text-gray-800 font-medium">
+                  {getDishName(item.dishId)} x{item.quantity}
+                </span>
               </li>
             ))}
           </ul>

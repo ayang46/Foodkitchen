@@ -1,19 +1,37 @@
-# Sample Data Export - TSV Files
+# Sample Data Export - TSV Files (Corrected Format)
 
-This directory contains tab-separated values (TSV) files with sample data that reflects what's stored in Supabase and displayed on the Foodkitchen website.
+This directory contains tab-separated values (TSV) files with sample data that can be directly imported into the Supabase `kv_store_b11e7096` table.
+
+## Table Structure
+
+The Supabase table has only 2 columns:
+```sql
+CREATE TABLE kv_store_b11e7096 (
+  key TEXT NOT NULL PRIMARY KEY,
+  value JSONB NOT NULL
+);
+```
+
+All data is stored as:
+- **key**: Prefix-based identifier (e.g., `category:uuid`, `dish:uuid`, `order:uuid`)
+- **value**: Complete JSON object with all properties
+
+---
 
 ## Files
 
 ### 1. `data_export_categories.tsv`
-Contains all menu categories used to organize dishes.
+Categories stored in the KV store.
 
-**Fields:**
-- `id` - Unique category identifier (UUID)
-- `name_en` - English category name
-- `name_zh` - Chinese category name (Simplified)
-- `created_at` - ISO 8601 timestamp
+**Columns:** `key` | `value`
 
-**Sample Categories:**
+**Example:**
+```
+key: category:550e8400-e29b-41d4-a716-446655440001
+value: {"id":"550e8400-e29b-41d4-a716-446655440001","nameEn":"Appetizers","nameZh":"开胃菜","createdAt":"2026-06-19T00:00:00Z"}
+```
+
+**Data (5 categories):**
 - Appetizers / 开胃菜
 - Main Courses / 主菜
 - Soups / 汤
@@ -23,23 +41,22 @@ Contains all menu categories used to organize dishes.
 ---
 
 ### 2. `data_export_dishes.tsv`
-Contains all menu dishes with complete information.
+Menu dishes stored in the KV store.
 
-**Fields:**
-- `id` - Unique dish identifier (UUID)
-- `name_en` - English dish name
-- `name_zh` - Chinese dish name (Simplified)
-- `description_en` - English description
-- `description_zh` - Chinese description
-- `ingredients_en` - English ingredient list (comma-separated)
-- `ingredients_zh` - Chinese ingredient list (comma-separated)
-- `price` - Price in USD
-- `category_id` - Reference to category (foreign key)
-- `available` - Boolean (true/false) - whether dish is currently available
-- `photo_url` - URL to dish image (external Unsplash URLs for demo)
-- `created_at` - ISO 8601 timestamp
+**Columns:** `key` | `value`
 
-**Sample Dishes (10 total):**
+**JSON fields in value:**
+- `id` - UUID
+- `nameEn`, `nameZh` - Bilingual names
+- `descriptionEn`, `descriptionZh` - Bilingual descriptions
+- `ingredientsEn`, `ingredientsZh` - Ingredient lists
+- `price` - Numeric price
+- `categoryId` - Reference to category
+- `available` - Boolean
+- `photoUrl` - Image URL
+- `createdAt` - ISO timestamp
+
+**Data (10 dishes):**
 1. Spring Rolls / 春卷 - $6.99
 2. Mapo Tofu / 麻婆豆腐 - $10.99
 3. Kung Pao Chicken / 宫保鸡丁 - $12.99
@@ -54,125 +71,126 @@ Contains all menu dishes with complete information.
 ---
 
 ### 3. `data_export_orders.tsv`
-Contains sample customer orders.
+Customer orders stored in the KV store.
 
-**Fields:**
-- `id` - Unique order identifier (UUID)
-- `customer_name` - Full name of customer
-- `customer_email` - Email address
-- `customer_phone` - Phone number
-- `dish_ids` - Pipe-separated list of dish IDs in the order
-- `message` - Special instructions or requests (can be empty)
-- `language` - Language of the order (en/zh)
-- `status` - Order status: `pending`, `confirmed`, or `completed`
-- `created_at` - ISO 8601 timestamp when order was placed
+**Columns:** `key` | `value`
 
-**Sample Orders (5 total):**
-1. John Smith - 2 dishes (Spring Rolls, Kung Pao Chicken) - pending
-2. Li Meili - 3 dishes (Mapo Tofu, Fried Rice, Hot & Sour Soup) - confirmed
+**JSON fields in value:**
+- `id` - UUID
+- `customerName` - Customer name
+- `customerEmail` - Email address
+- `customerPhone` - Phone number
+- `dishIds` - Array of dish UUIDs
+- `message` - Special instructions (can be empty)
+- `language` - "en" or "zh"
+- `status` - "pending", "confirmed", or "completed"
+- `createdAt` - ISO timestamp
+
+**Data (5 orders):**
+1. John Smith - 2 dishes - pending
+2. Li Meili - 3 dishes - confirmed
 3. Maria Garcia - 2 vegetarian dishes - pending
-4. Chen Wei - 2 dishes (Orange Chicken, Chow Mein) - completed
-5. Sophie Lee - 2 dishes (Egg Drop Soup, Fried Rice) - confirmed
+4. Chen Wei - 2 dishes - completed
+5. Sophie Lee - 2 dishes - confirmed
 
 ---
 
-## How to Use These Files
+## How to Import into Supabase
 
-### Viewing in Spreadsheet Software
-- Open any TSV file with Excel, Google Sheets, or LibreOffice Calc
-- Files are tab-separated for easy column parsing
-- Headers are in the first row
+### Method 1: Using Supabase Dashboard (SQL Editor)
 
-### Importing into Database
-```bash
-# Example: Import categories using psql (PostgreSQL)
-psql -U username -d database_name -c "\COPY kv_store_b11e7096(key, value) FROM PROGRAM 'awk -F\"\t\" \"NR>1 {print \\\"category:\\\" \$1 \\\"\t{\\\" \$2 \\\"}\\\" }\" DELIMITER '\t' CSV"
+1. Go to your Supabase project → SQL Editor
+2. Create an insert query. For each row in the TSV:
+
+```sql
+INSERT INTO kv_store_b11e7096 (key, value) VALUES
+  ('category:550e8400-e29b-41d4-a716-446655440001', '{"id":"550e8400-e29b-41d4-a716-446655440001","nameEn":"Appetizers","nameZh":"开胃菜","createdAt":"2026-06-19T00:00:00Z"}'),
+  ('category:550e8400-e29b-41d4-a716-446655440002', '{"id":"550e8400-e29b-41d4-a716-446655440002","nameEn":"Main Courses","nameZh":"主菜","createdAt":"2026-06-19T00:00:00Z"}');
 ```
 
-### Converting to CSV
+### Method 2: Using Python Script
+
+```python
+import pandas as pd
+import json
+from supabase import create_client
+
+# Read TSV
+df = pd.read_csv('data_export_categories.tsv', sep='\t')
+
+# Connect to Supabase
+url = "your_supabase_url"
+key = "your_supabase_key"
+supabase = create_client(url, key)
+
+# Insert data
+for _, row in df.iterrows():
+    key_col = row['key']
+    value_json = json.loads(row['value'])
+    
+    supabase.table('kv_store_b11e7096').insert({
+        'key': key_col,
+        'value': value_json
+    }).execute()
+```
+
+### Method 3: Seed via the Web App
+
+1. Go to `/admin` and log in
+2. Click "Add Demo Data" button on the dashboard
+3. This triggers the `/seed` endpoint which auto-populates all data
+
+---
+
+## Importing CSV Files
+
+If you're working with CSV format instead of TSV:
+
+### Convert TSV to CSV
 ```bash
-# Convert TSV to CSV (replace tabs with commas)
 sed 's/\t/,/g' data_export_categories.tsv > data_export_categories.csv
 ```
 
-### Using in Python
-```python
-import pandas as pd
-
-# Read TSV file
-categories = pd.read_csv('data_export_categories.tsv', sep='\t')
-dishes = pd.read_csv('data_export_dishes.tsv', sep='\t')
-orders = pd.read_csv('data_export_orders.tsv', sep='\t')
-
-# Display data
-print(categories)
-print(dishes[['name_en', 'name_zh', 'price', 'category_id']])
-print(orders[['customer_name', 'dish_ids', 'status']])
+### Import CSV using psql
+```bash
+psql -U username -d database_name \
+  -c "\COPY kv_store_b11e7096(key, value) FROM 'data_export_categories.csv' CSV HEADER DELIMITER ',';"
 ```
 
 ---
 
-## Data Relationships
+## Data Validation
 
-**Foreign Keys:**
-- `dishes.category_id` → `categories.id`
-- `orders.dish_ids` → `dishes.id` (pipe-separated list)
-
-**Example Relationships:**
-- Category "Main Courses" (550e8400-e29b-41d4-a716-446655440002) contains:
-  - Mapo Tofu
-  - Kung Pao Chicken
-  - Orange Chicken
-
-- Order by John Smith includes:
-  - Spring Rolls (from Appetizers)
-  - Kung Pao Chicken (from Main Courses)
+Before importing, verify:
+- ✅ All UUIDs are valid format (8-4-4-4-12 hex digits)
+- ✅ All JSON in `value` column is valid (no unescaped quotes)
+- ✅ Key prefixes match data type: `category:`, `dish:`, `order:`
+- ✅ All references are valid (categoryId exists, dishIds exist)
+- ✅ Timestamps are ISO 8601 format
 
 ---
 
-## Database Schema Reference
+## Viewing Imported Data
 
-All this data is stored in the `kv_store_b11e7096` table in Supabase:
+After import, verify data appears in:
 
+**Website:**
+- `/menu` - See all dishes grouped by category
+- `/admin/dishes` - Manage dishes with drag & drop
+- `/admin/orders` - View and manage orders
+
+**Database:**
 ```sql
-CREATE TABLE kv_store_b11e7096 (
-  key TEXT NOT NULL PRIMARY KEY,
-  value JSONB NOT NULL
-);
+SELECT key, value FROM kv_store_b11e7096 WHERE key LIKE 'category:%';
+SELECT key, value FROM kv_store_b11e7096 WHERE key LIKE 'dish:%';
+SELECT key, value FROM kv_store_b11e7096 WHERE key LIKE 'order:%';
 ```
-
-**Storage Format:**
-- Categories: `category:{id}` → JSON object
-- Dishes: `dish:{id}` → JSON object
-- Orders: `order:{id}` → JSON object
 
 ---
 
 ## Notes
 
-- All UUIDs in these files are sample/demo values
-- Timestamps are in ISO 8601 format (UTC)
-- Photo URLs point to external Unsplash images for demo purposes
-- Chinese text uses Simplified Chinese (Mainland China standard)
-- Headers use only alphanumeric characters, hyphens (-), and underscores (_)
-- No special characters in header names for database compatibility
-
----
-
-## How Data Appears on Website
-
-**Menu Page** (`/menu`):
-- Displays all dishes grouped by category
-- Shows dish name, description, price, and photo
-- Users can search and filter by category
-
-**Admin Dashboard** (`/admin`):
-- Manage categories, add/edit/delete dishes
-- View all orders with customer details
-- Update order status
-- Reorder dishes via drag-and-drop
-
-**Seeding** (via `POST /make-server-b11e7096/seed`):
-- Clears existing data first
-- Populates all categories, dishes, and orders
-- Can be triggered from admin dashboard
+- All data uses camelCase for JSON field names (e.g., `nameEn`, `categoryId`)
+- Chinese text uses Simplified Chinese (Mainland standard)
+- Photo URLs are external Unsplash links for demo purposes
+- This data matches the seeding function in `supabase/functions/server/index.tsx`
