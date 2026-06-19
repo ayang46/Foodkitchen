@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Foodkitchen</title>
+    <script>
+      (function () {
+        var basePath = '/Foodkitchen';
+        var redirectPath = window.location.pathname.replace(new RegExp('^' + basePath), '') + window.location.search + window.location.hash;
+        window.sessionStorage.setItem('foodkitchen-spa-redirect', redirectPath || '/');
+        window.location.replace(basePath + '/');
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
