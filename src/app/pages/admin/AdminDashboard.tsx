@@ -1,17 +1,52 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
-import { UtensilsCrossed, ShoppingBag, LogOut, Home, Globe } from 'lucide-react';
+import { UtensilsCrossed, ShoppingBag, LogOut, Home, Globe, Database, CheckCircle, AlertCircle } from 'lucide-react';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
 export const AdminDashboard: React.FC = () => {
   const { signOut, user } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
+  const [seedStatus, setSeedStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [seedMessage, setSeedMessage] = useState('');
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/admin/login');
+  };
+
+  const handleSeedDatabase = async () => {
+    setSeedStatus('loading');
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-b11e7096/seed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSeedStatus('success');
+        setSeedMessage(t('Successfully added 5 categories, 10 dishes, and 5 sample orders!', '成功添加了5个分类、10道菜品和5个示例订单！'));
+      } else {
+        setSeedStatus('error');
+        setSeedMessage(data.error || t('Failed to seed database', '无法为数据库添加种子数据'));
+      }
+    } catch (error: any) {
+      setSeedStatus('error');
+      setSeedMessage(error.message || t('Network error', '网络错误'));
+    }
+
+    setTimeout(() => setSeedStatus('idle'), 5000);
   };
 
   const menuItems = [
@@ -97,6 +132,41 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </Link>
           ))}
+        </div>
+
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="bg-blue-50 rounded-2xl p-6 sm:p-8">
+            <div className="flex items-start space-x-4">
+              <Database className="w-8 h-8 text-blue-600 flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">
+                  {t('Demo Data', '演示数据')}
+                </h3>
+                <p className="text-base sm:text-lg text-gray-600 mb-4">
+                  {t('Populate the database with sample dishes, categories, and orders for testing and demo purposes', '使用示例菜品、分类和订单来填充数据库以用于测试和演示目的')}
+                </p>
+                <button
+                  onClick={handleSeedDatabase}
+                  disabled={seedStatus === 'loading'}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold rounded-lg transition-colors"
+                >
+                  {seedStatus === 'loading' ? t('Seeding...', '正在添加...') : t('Add Demo Data', '添加演示数据')}
+                </button>
+                {seedStatus === 'success' && (
+                  <div className="mt-4 flex items-center space-x-2 text-green-700 bg-green-50 p-4 rounded-lg">
+                    <CheckCircle className="w-5 h-5" />
+                    <span>{seedMessage}</span>
+                  </div>
+                )}
+                {seedStatus === 'error' && (
+                  <div className="mt-4 flex items-center space-x-2 text-red-700 bg-red-50 p-4 rounded-lg">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>{seedMessage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
